@@ -6,7 +6,7 @@ process QIIME_IMPORT {
     publishDir "${params.outdir}/04_qiime2_import", mode: 'copy', overwrite: true
 
     input:
-    path clean_fastqs
+    tuple val(sample_ids), path(forward_reads, stageAs: 'forward/read??/*'), path(reverse_reads, stageAs: 'reverse/read??/*')
 
     output:
     path 'manifest.tsv',      emit: manifest
@@ -15,18 +15,27 @@ process QIIME_IMPORT {
     path 'versions.yml',      emit: versions
 
     script:
+    def forward = forward_reads instanceof List ? forward_reads : [forward_reads]
+    def reverse = reverse_reads instanceof List ? reverse_reads : [reverse_reads]
+    def records = sample_ids.withIndex().collect { id, i -> [id, forward[i].toString(), reverse[i].toString()] }
+    def encoded = groovy.json.JsonOutput.toJson(records).bytes.encodeBase64().toString()
     """
     export TMPDIR="\$PWD/tmp" XDG_CACHE_HOME="\$PWD/cache"
     export MPLCONFIGDIR="\$PWD/mpl"
     mkdir -p "\$TMPDIR" "\$XDG_CACHE_HOME" "\$MPLCONFIGDIR"
 
-    printf 'sample-id\\tforward-absolute-filepath\\treverse-absolute-filepath\\n' > manifest.tsv
-    for r1 in *.R1.trimmed.fastq.gz; do
-      sample="\${r1%.R1.trimmed.fastq.gz}"
-      r2="\${sample}.R2.trimmed.fastq.gz"
-      test -f "\$r2"
-      printf '%s\\t%s/%s\\t%s/%s\\n' "\$sample" "\$PWD" "\$r1" "\$PWD" "\$r2" >> manifest.tsv
-    done
+    python - <<'PYMANIFEST'
+    import base64, csv, json
+    from pathlib import Path
+    rows = json.loads(base64.b64decode('${encoded}'))
+    if not rows or len({r[0] for r in rows}) != len(rows):
+        raise SystemExit('Import requires nonempty, unique sample IDs')
+    with open('manifest.tsv', 'w', newline='') as handle:
+        writer = csv.writer(handle, delimiter=chr(9))
+        writer.writerow(['sample-id', 'forward-absolute-filepath', 'reverse-absolute-filepath'])
+        for sample, forward, reverse in rows:
+            writer.writerow([sample, str(Path(forward).absolute()), str(Path(reverse).absolute())])
+    PYMANIFEST
 
     qiime tools import \
       --type 'SampleData[PairedEndSequencesWithQuality]' \

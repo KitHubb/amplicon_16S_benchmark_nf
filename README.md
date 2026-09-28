@@ -259,6 +259,15 @@ Add `-c /path/to/site.config` to the run command. The values above illustrate th
 
 ### 7. Analysis settings and customization
 
+Optional stage skipping (both default to `false`):
+
+```yaml
+skip_cutadapt: true
+skip_qc: true
+```
+
+`skip_cutadapt` bypasses all Cutadapt primer/adapter removal, quality trimming, and minimum-length filtering; original paired reads go directly to QIIME import. When Cutadapt is enabled, `--discard-untrimmed` remains fixed. `skip_qc` disables both raw and post-Cutadapt FastQC/MultiQC. If only Cutadapt is skipped, raw QC runs once and post-Cutadapt QC is omitted. Sample IDs still come from the `reads` pairing pattern; no trimmed filename suffix is required. Skipped stages do not produce new outputs; use a fresh output directory to avoid confusing old reports with the current run.
+
 Use parameters first. Edit tool modules when you need to change commands or logic.
 
 | Purpose | Parameters or defaults | Implementation |
@@ -620,6 +629,15 @@ process {
 <a id="ko-options"></a>
 
 ### 7. 분석 설정과 코드 수정
+
+단계 생략 옵션은 둘 다 기본값이 `false`입니다.
+
+```yaml
+skip_cutadapt: true
+skip_qc: true
+```
+
+`skip_cutadapt`는 Cutadapt의 프라이머·adapter 제거, 품질 절단, 최소 길이 필터를 모두 생략하고 원본 read 쌍을 QIIME으로 가져옵니다. Cutadapt를 실행할 때는 `--discard-untrimmed`가 그대로 고정 적용됩니다. `skip_qc`는 처리 전·후 FastQC/MultiQC를 모두 생략합니다. Cutadapt만 생략하면 원본 QC만 한 번 수행하고 처리 후 QC는 생략합니다. 샘플 ID는 기존 `reads` 패턴으로 추출하며 trimmed 파일명 접미사는 필요하지 않습니다. 생략한 단계의 새 결과는 생성하지 않으므로 이전 보고서와 혼동하지 않도록 새 결과 폴더를 사용하세요.
 
 먼저 파라미터로 조정하고, 명령이나 로직을 바꿔야 할 때 도구 모듈을 수정합니다.
 

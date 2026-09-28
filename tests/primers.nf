@@ -34,9 +34,19 @@ workflow PRIMER_TEST {
     assert selected.primer_r == v34.primer_r
     log.info 'Primer assertions and YAML/CLI precedence passed'
     QIIME_CONTAINER_CHECK()
-    CUTADAPT(Channel.of(tuple([id: 'synthetic'], file(params.test_r1), file(params.test_r2))), Channel.value(selected))
-    QC(CUTADAPT.out.reads, 'container_qc')
-    QIIME_IMPORT(CUTADAPT.out.reads.flatMap { meta, r1, r2 -> [r1, r2] }.collect())
+    reads = Channel.of(tuple([id: 'synthetic'], file(params.test_r1), file(params.test_r2)))
+    if (params.skip_cutadapt.toString().toBoolean()) {
+        import_reads = reads
+    } else {
+        CUTADAPT(reads, Channel.value(selected))
+        import_reads = CUTADAPT.out.reads
+    }
+    if (!params.skip_qc.toString().toBoolean()) {
+        QC(import_reads, 'container_qc')
+    }
+    QIIME_IMPORT(import_reads.collect(flat: false).map { rows ->
+        tuple(rows.collect { it[0].id }, rows.collect { it[1] }, rows.collect { it[2] })
+    })
 }
 
 workflow {

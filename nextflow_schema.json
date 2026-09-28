@@ -20,6 +20,8 @@
     "sampling_depth": { "type": "integer", "default": 1000, "minimum": 1 },
     "alpha_max_depth": { "type": "integer", "default": 10000, "minimum": 1 },
     "diversity_enabled": { "type": "boolean", "default": true },
+    "skip_cutadapt": { "type": "boolean", "default": false, "description": "Skip Cutadapt entirely and import original paired reads" },
+    "skip_qc": { "type": "boolean", "default": false, "description": "Skip all FastQC and MultiQC tasks" },
     "quality": { "type": "integer", "default": 20, "minimum": 0 },
     "min_length": { "type": "integer", "default": 50, "minimum": 1 },
     "dada2_pooling_method": { "type": "string", "enum": ["independent", "pseudo"], "default": "independent" },

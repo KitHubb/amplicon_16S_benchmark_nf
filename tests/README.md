@@ -56,3 +56,17 @@ Reports are written to `results/primer-test/container_qc/`, QIIME artifacts to
 
 GitHub Actions runs the Docker command and verifier on every push and PR.
 Tagged releases are published only after the regression passes.
+
+## Optional stage skipping
+
+Use a fresh output directory for each test. The raw-read check uses the bundled
+fixtures; no research data is needed.
+
+```bash
+nextflow run . -profile test,singularity --skip_cutadapt true --skip_qc true --outdir results/test-skip-both
+python3 tests/check_containers.py results/test-skip-both --skip-cutadapt --skip-qc
+```
+
+To test one option alone, omit the other Nextflow option and verifier flag.
+The verifier checks that skipped-stage directories are absent, sample IDs are
+preserved, and imported raw reads match the fixture exactly when Cutadapt is skipped.

@@ -15,6 +15,11 @@ include { TRIMM_OPTIMAL_WORKFLOW } from './subworkflows/trimm_optimal'
 include { PRIMER_TEST } from './tests/primers'
 
 workflow {
+    ['skip_cutadapt', 'skip_qc'].each { key ->
+        if (!(params[key].toString() in ['true', 'false'])) {
+            error "${key} must be true or false"
+        }
+    }
     if (!(params.dada2_pooling_method instanceof CharSequence) || !(params.dada2_pooling_method in ['independent', 'pseudo'])) {
         error 'dada2_pooling_method must be one of: independent, pseudo'
     }
@@ -22,8 +27,11 @@ workflow {
     if (params.test) {
         PRIMER_TEST()
     } else {
-        primers = PrimerConfig.resolve(params)
-        log.info "Region: ${primers.region}; primer_f: ${primers.primer_f}; primer_r: ${primers.primer_r}; adapter_f: ${primers.adapter_f}; adapter_r: ${primers.adapter_r}"
+        primers = null
+        if (!params.skip_cutadapt.toString().toBoolean()) {
+            primers = PrimerConfig.resolve(params)
+            log.info "Region: ${primers.region}; primer_f: ${primers.primer_f}; primer_r: ${primers.primer_r}; adapter_f: ${primers.adapter_f}; adapter_r: ${primers.adapter_r}"
+        }
         if (!params.reads) {
             error 'Provide --reads, e.g. /data/run/*_{1,2}.fastq.gz'
         }
@@ -39,21 +47,22 @@ workflow {
             .fromFilePairs(params.reads, checkIfExists: true, flat: true)
             .map { id, r1, r2 -> tuple([id: id.toString(), single_end: false], r1, r2) }
 
-        // 1. Raw-read FastQC and MultiQC.
-        RAW_QC(reads_ch, '01_raw_qc')
-
-        // 2. Region-selected primer removal and quality trimming.
-        CUTADAPT(reads_ch, Channel.value(primers))
-
-        // 3. FastQC and MultiQC after Cutadapt.
-        CLEAN_QC(CUTADAPT.out.reads, '03_clean_qc')
-
-        // 4. Collect all cleaned FASTQ files and import as paired-end QIIME data.
-        clean_fastqs_ch = CUTADAPT.out.reads
-            .flatMap { meta, r1, r2 -> [r1, r2] }
-            .collect()
-
-        QIIME_IMPORT(clean_fastqs_ch)
+        if (!params.skip_qc.toString().toBoolean()) {
+            RAW_QC(reads_ch, '01_raw_qc')
+        }
+        if (params.skip_cutadapt.toString().toBoolean()) {
+            log.info 'Skipping Cutadapt; importing original paired reads'
+            import_reads = reads_ch
+        } else {
+            CUTADAPT(reads_ch, Channel.value(primers))
+            import_reads = CUTADAPT.out.reads
+            if (!params.skip_qc.toString().toBoolean()) {
+                CLEAN_QC(import_reads, '03_clean_qc')
+            }
+        }
+        QIIME_IMPORT(import_reads.collect(flat: false).map { rows ->
+            tuple(rows.collect { it[0].id }, rows.collect { it[1] }, rows.collect { it[2] })
+        })
 
         metadata_ch = Channel.value(file(params.metadata, checkIfExists: true))
         classifier_file = file(params.classifier, checkIfExists: true)
