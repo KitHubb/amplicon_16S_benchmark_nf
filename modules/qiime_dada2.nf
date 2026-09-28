@@ -23,6 +23,7 @@ process QIIME_DADA2 {
     mkdir -p \"\$TMPDIR\" \"\$NUMBA_CACHE_DIR\" \"\$MPLCONFIGDIR\" \"\$XDG_CACHE_HOME\"
 
     qiime dada2 denoise-paired \
+      --p-pooling-method ${params.dada2_pooling_method} \
       --i-demultiplexed-seqs ${demux} \
       --p-trim-left-f 0 --p-trim-left-r 0 \
       --p-trunc-len-f ${params.dada2_trunc_len_f} \

@@ -15,6 +15,10 @@ include { TRIMM_OPTIMAL_WORKFLOW } from './subworkflows/trimm_optimal'
 include { PRIMER_TEST } from './tests/primers'
 
 workflow {
+    if (!(params.dada2_pooling_method instanceof CharSequence) || !(params.dada2_pooling_method in ['independent', 'pseudo'])) {
+        error 'dada2_pooling_method must be one of: independent, pseudo'
+    }
+    log.info "DADA2 pooling method: ${params.dada2_pooling_method}"
     if (params.test) {
         PRIMER_TEST()
     } else {

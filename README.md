@@ -127,6 +127,8 @@ Primers accept IUPAC DNA letters, including lowercase. Read-through adapters are
 
 ### 4. Truncation optimization
 
+`dada2_pooling_method` selects `independent` (default) or `pseudo` for both standard DADA2 and every trimming candidate. Other values fail at workflow startup. Set it in your parameter YAML or pass `--dada2_pooling_method pseudo`. QIIME 2 pseudo-pooling is not R DADA2 full `pool=TRUE`. Existing output paths are unchanged; choose different `outdir` values when comparing runs.
+
 Set `trimm_optimal: true` to enable candidate comparison. Truncation lengths apply to the reads imported into QIIME 2 after Cutadapt.
 
 1. Run DADA2 independently for each forward/reverse pair in the candidate TSV.
@@ -486,6 +488,8 @@ printf 'sample-id\tgroup\nS01\tcontrol\nS02\ttreatment\n' > metadata.tsv
 <a id="ko-optimization"></a>
 
 ### 4. 절단 길이 최적화
+
+`dada2_pooling_method`는 일반 DADA2와 모든 trimming 후보에 적용되며 `independent`(기본값) 또는 `pseudo`를 선택합니다. 다른 값은 workflow 시작 시 거부합니다. 파라미터 YAML에 지정하거나 `--dada2_pooling_method pseudo`로 전달하세요. QIIME 2 pseudo-pooling은 R DADA2의 완전한 `pool=TRUE`와 다릅니다. 기존 결과 경로는 유지하므로 실행을 비교할 때는 `outdir`를 다르게 지정하세요.
 
 `trimm_optimal: true`로 후보 비교를 활성화합니다. 절단 길이는 Cutadapt 처리 후 QIIME 2로 가져온 reads에 적용합니다.
 
