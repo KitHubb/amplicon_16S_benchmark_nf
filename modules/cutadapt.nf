@@ -1,36 +1,29 @@
 process CUTADAPT {
     tag meta.id
     label 'process_medium'
-    container { params.cutadapt_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/biocontainers/cutadapt:5.2--py311hc303176_2' : 'docker://quay.io/biocontainers/cutadapt:5.2--py311hc303176_2') }
-
-    publishDir "${params.outdir}/02_cutadapt_q20", mode: 'copy', overwrite: true
 
     input:
     tuple val(meta), path(r1), path(r2)
+    val trimming_options
     val primers
+    path trimming_script
 
     output:
     tuple val(meta),
           path("${meta.id}.R1.trimmed.fastq.gz"),
           path("${meta.id}.R2.trimmed.fastq.gz"),
           emit: reads
-    path "${meta.id}.cutadapt.json", emit: json
+    path "${meta.id}*.cutadapt.json", emit: json
+    path "${meta.id}.trimming.summary.json", emit: summary
     path "${meta.id}.cutadapt.log",  emit: cutadapt_log
     path 'versions.yml',              emit: versions
 
     script:
+    def config = trimming_options + [primers: primers]
+    def encoded = groovy.json.JsonOutput.toJson(config).bytes.encodeBase64().toString()
+    def quote = { value -> "'" + value.toString().replace("'", "'\"'\"'") + "'" }
     """
-    cutadapt --cores ${task.cpus} \
-      -g '${primers.primer_f}' -a '${primers.adapter_f}' \
-      -G '${primers.primer_r}' -A '${primers.adapter_r}' \
-      -n 2 -q ${params.quality} -Q ${params.quality} \
-      --minimum-length ${params.min_length} \
-      --discard-untrimmed \
-      --json ${meta.id}.cutadapt.json \
-      -o ${meta.id}.R1.trimmed.fastq.gz \
-      -p ${meta.id}.R2.trimmed.fastq.gz \
-      ${r1} ${r2} > ${meta.id}.cutadapt.log
-
+    python3 ${quote.call(trimming_script)} --config '${encoded}' --sample ${quote.call(meta.id)} --cores ${task.cpus} ${quote.call(r1)} ${quote.call(r2)}
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
       cutadapt: \$(cutadapt --version)

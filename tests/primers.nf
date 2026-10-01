@@ -38,13 +38,13 @@ workflow PRIMER_TEST {
     if (params.skip_cutadapt.toString().toBoolean()) {
         import_reads = reads
     } else {
-        CUTADAPT(reads, Channel.value(selected))
+        CUTADAPT(reads, TrimmingConfig.resolve(params), Channel.value(selected), file("${projectDir}/bin/trim_reads.py"))
         import_reads = CUTADAPT.out.reads
     }
     if (!params.skip_qc.toString().toBoolean()) {
         QC(import_reads, 'container_qc')
     }
-    QIIME_IMPORT(import_reads.collect(flat: false).map { rows ->
+    QIIME_IMPORT(params.run_label, import_reads.collect(flat: false).map { rows ->
         tuple(rows.collect { it[0].id }, rows.collect { it[1] }, rows.collect { it[2] })
     })
 }

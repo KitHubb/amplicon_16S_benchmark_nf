@@ -1,11 +1,10 @@
 process QIIME_DADA2 {
-    tag params.run_label
+    tag run_label
     label 'process_high'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-
-    publishDir "${params.outdir}/05_dada2", mode: 'copy', overwrite: true
 
     input:
+    val options
+    val run_label
     path demux
 
     output:
@@ -23,13 +22,13 @@ process QIIME_DADA2 {
     mkdir -p \"\$TMPDIR\" \"\$NUMBA_CACHE_DIR\" \"\$MPLCONFIGDIR\" \"\$XDG_CACHE_HOME\"
 
     qiime dada2 denoise-paired \
-      --p-pooling-method ${params.dada2_pooling_method} \
+      --p-pooling-method ${options.dada2_pooling_method} \
       --i-demultiplexed-seqs ${demux} \
       --p-trim-left-f 0 --p-trim-left-r 0 \
-      --p-trunc-len-f ${params.dada2_trunc_len_f} \
-      --p-trunc-len-r ${params.dada2_trunc_len_r} \
-      --p-max-ee-f ${params.dada2_max_ee_f} \
-      --p-max-ee-r ${params.dada2_max_ee_r} \
+      --p-trunc-len-f ${options.dada2_trunc_len_f} \
+      --p-trunc-len-r ${options.dada2_trunc_len_r} \
+      --p-max-ee-f ${options.dada2_max_ee_f} \
+      --p-max-ee-r ${options.dada2_max_ee_r} \
       --p-trunc-q 2 \
       --p-min-overlap 12 \
       --p-chimera-method consensus \

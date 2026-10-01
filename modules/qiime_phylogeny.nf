@@ -1,11 +1,9 @@
 process QIIME_PHYLOGENY {
-    tag params.run_label
+    tag run_label
     label 'process_high'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-
-    publishDir "${params.outdir}/07_phylogeny", mode: 'copy', overwrite: true
 
     input:
+    val run_label
     path repseq
 
     output:

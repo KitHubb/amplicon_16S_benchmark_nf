@@ -1,11 +1,9 @@
 process QIIME_IMPORT {
-    tag params.run_label
+    tag run_label
     label 'process_medium'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-
-    publishDir "${params.outdir}/04_qiime2_import", mode: 'copy', overwrite: true
 
     input:
+    val run_label
     tuple val(sample_ids), path(forward_reads, stageAs: 'forward/read??/*'), path(reverse_reads, stageAs: 'reverse/read??/*')
 
     output:

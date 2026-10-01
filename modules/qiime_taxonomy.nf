@@ -1,11 +1,10 @@
 process QIIME_TAXONOMY {
-    tag "${params.run_label}:${taxonomy_label}"
+    tag "${run_label}:${taxonomy_label}"
     label 'process_high'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-
-    publishDir "${params.outdir}/06_taxonomy", mode: 'copy', overwrite: true
 
     input:
+    val options
+    val run_label
     path repseq
     path table
     path metadata
@@ -26,7 +25,7 @@ process QIIME_TAXONOMY {
     qiime feature-classifier classify-sklearn \
       --i-classifier ${classifier} \
       --i-reads ${repseq} \
-      --p-confidence ${params.taxonomy_confidence} \
+      --p-confidence ${options.taxonomy_confidence} \
       --p-n-jobs ${task.cpus} \
       --o-classification taxonomy_${taxonomy_label}.qza
 

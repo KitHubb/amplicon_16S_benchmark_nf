@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""TEST DOUBLE: record argv and produce fake files; never performs analysis."""
+import json
+import sys
+from pathlib import Path
+args = sys.argv[1:]
+with open('mock_commands.jsonl', 'a') as handle:
+    handle.write(json.dumps(args) + '\n')
+if args == ['--version']:
+    print('QIIME TEST DOUBLE')
+    sys.exit(0)
+def value(key):
+    return args[args.index(key) + 1]
+for i, arg in enumerate(args):
+    if arg.startswith('--o-'):
+        Path(args[i+1]).write_text('TEST DOUBLE - NOT A QIIME ARTIFACT\n')
+if '--output-dir' in args or (args[:2] == ['tools', 'export'] and '--output-path' in args):
+    out = Path(value('--output-dir') if '--output-dir' in args else value('--output-path'))
+    out.mkdir(exist_ok=True)
+    if args[:2] == ['tools', 'export']:
+        source = value('--input-path')
+        if 'stats' in source:
+            (out/'stats.tsv').write_text('sample-id\tinput\tfiltered\tmerged\tnon-chimeric\nS1\t100\t90\t80\t70\n')
+        elif 'taxonomy' in source:
+            (out/'taxonomy.tsv').write_text('Feature ID\tTaxon\nASV1\tk__Bacteria; s__Example species\n')
+        else:
+            (out/'feature-table.biom').write_text('TEST DOUBLE\n')
+    else:
+        for metric in ['faith_pd', 'observed_features', 'shannon', 'evenness']:
+            (out/(metric + '_vector.qza')).write_text('TEST DOUBLE\n')

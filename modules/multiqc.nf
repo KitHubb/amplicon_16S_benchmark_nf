@@ -1,9 +1,6 @@
 process MULTIQC {
     tag stage
     label 'process_low'
-    container { params.multiqc_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/biocontainers/multiqc:1.27--pyhdfd78af_0' : 'docker://quay.io/biocontainers/multiqc:1.27--pyhdfd78af_0') }
-
-    publishDir { "${params.outdir}/${stage}/multiqc" }, mode: 'copy', overwrite: true
 
     input:
     path fastqc_zips

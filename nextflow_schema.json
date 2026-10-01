@@ -22,6 +22,14 @@
     "diversity_enabled": { "type": "boolean", "default": true },
     "skip_cutadapt": { "type": "boolean", "default": false, "description": "Skip Cutadapt entirely and import original paired reads" },
     "skip_qc": { "type": "boolean", "default": false, "description": "Skip all FastQC and MultiQC tasks" },
+    "extra_adapters_f": { "type": "array", "items": { "type": "string", "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn]+$" }, "default": [], "description": "R1 extra 3-prime adapters in sequenced orientation; list Nextera explicitly" },
+    "extra_adapters_r": { "type": "array", "items": { "type": "string", "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn]+$" }, "default": [], "description": "R2 extra 3-prime adapters in sequenced orientation" },
+    "trim_poly_a": { "type": "boolean", "default": false },
+    "trim_poly_g": { "type": "boolean", "default": false },
+    "poly_min_length": { "type": "integer", "minimum": 1, "default": 10, "description": "Minimum exact consecutive A/G bases at the 3-prime end" },
+    "discard_untrimmed": { "type": "boolean", "default": true, "description": "Discard pairs if either mate has no primer/read-through adapter match" },
+    "stop_after": { "type": "string", "enum": ["none", "raw_qc", "cutadapt", "clean_qc"], "default": "none" },
+    "qc_only": { "type": "boolean", "default": false, "description": "Alias for stop_after clean_qc" },
     "quality": { "type": "integer", "default": 20, "minimum": 0 },
     "min_length": { "type": "integer", "default": 50, "minimum": 1 },
     "dada2_pooling_method": { "type": "string", "enum": ["independent", "pseudo"], "default": "independent" },
@@ -35,5 +43,15 @@
   },
   "if": { "properties": { "test": { "const": true } }, "required": ["test"] },
   "then": {},
-  "else": { "required": ["reads", "classifier", "metadata"] }
+  "else": {
+    "required": ["reads"],
+    "if": {
+      "anyOf": [
+        { "properties": { "stop_after": { "enum": ["raw_qc", "cutadapt", "clean_qc"] } }, "required": ["stop_after"] },
+        { "properties": { "qc_only": { "const": true } }, "required": ["qc_only"] }
+      ]
+    },
+    "then": {},
+    "else": { "required": ["classifier", "metadata"] }
+  }
 }

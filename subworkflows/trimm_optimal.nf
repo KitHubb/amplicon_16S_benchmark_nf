@@ -5,12 +5,14 @@ workflow TRIMM_OPTIMAL_WORKFLOW {
     demux
     classifier
     taxonomy_label
+    combinations_file
+    dada2_options
+    taxonomy_options
 
     main:
-    combinations_file = params.trimm_combinations ?: "${projectDir}/params/trimming/${params.region.toString().trim().toLowerCase()}_10bp.tsv"
     log.info "Truncation candidates: ${combinations_file}"
     combinations = Channel
-        .fromPath(combinations_file, checkIfExists: true)
+        .value(combinations_file)
         .splitCsv(header: true, sep: '\t', strip: true)
         .map { row ->
             def name = row.name.toString()
@@ -29,8 +31,8 @@ workflow TRIMM_OPTIMAL_WORKFLOW {
         .combine(demux)
         .map { opt_id, trunc_f, trunc_r, demux_qza -> tuple(opt_id, trunc_f, trunc_r, demux_qza) }
 
-    DADA2_TRIMM_SWEEP(sweep_input)
-    TAXONOMY_TRIMM_SWEEP(DADA2_TRIMM_SWEEP.out.results, classifier, taxonomy_label)
+    DADA2_TRIMM_SWEEP(dada2_options, sweep_input)
+    TAXONOMY_TRIMM_SWEEP(taxonomy_options, DADA2_TRIMM_SWEEP.out.results, classifier, taxonomy_label)
 
     candidate_files = TAXONOMY_TRIMM_SWEEP.out.evaluated
         .flatMap { db, opt_id, trunc_f, trunc_r, table, repseq, stats, taxonomy, metrics ->

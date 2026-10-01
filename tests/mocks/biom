@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+"""TEST DOUBLE for the QIIME module interface test only."""
+import sys
+from pathlib import Path
+Path(sys.argv[sys.argv.index('-o')+1]).write_text('#OTU ID\tS1\nASV1\t70\n')

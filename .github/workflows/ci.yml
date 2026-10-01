@@ -21,6 +21,8 @@ jobs:
       - uses: nf-core/setup-nextflow@v2
         with:
           version: '26.04.2'
+      - name: Verify standalone module interfaces with test doubles
+        run: python3 tests/test_reuse.py
       - name: Run primer and all-container smoke tests with automatic image download
         run: >-
           nextflow run . -profile test,docker
@@ -33,6 +35,8 @@ jobs:
         run: |
           nextflow run . -profile test,docker --skip_cutadapt true --skip_qc true --outdir results/skip-test
           python3 tests/check_containers.py results/skip-test --skip-cutadapt --skip-qc
+      - name: Test multi-pass trimming, early stops and resume with synthetic pairs
+        run: python3 tests/test_trimming.py --profile docker
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -43,6 +47,8 @@ jobs:
             .nextflow.log
             results/primer-test/
             results/skip-test/
+            results/trimming-test/
+            results/module-reuse-test/
             work/**/.command.*
 
   release:

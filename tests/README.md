@@ -70,3 +70,17 @@ python3 tests/check_containers.py results/test-skip-both --skip-cutadapt --skip-
 To test one option alone, omit the other Nextflow option and verifier flag.
 The verifier checks that skipped-stage directories are absent, sample IDs are
 preserved, and imported raw reads match the fixture exactly when Cutadapt is skipped.
+
+## Trimming and module reuse
+
+```bash
+python3 tests/test_trimming.py --profile singularity --outdir results/trimming-test
+python3 tests/test_reuse.py results/module-reuse-test
+```
+
+Use new output directories. The trimming test checks exact synthetic sequences,
+statistics, MultiQC, discard settings, early stops, invalid parameters and resume.
+The module reuse test uses QIIME/BIOM test doubles to check option forwarding,
+candidate selection and publication paths without the pipeline configuration in
+its first run. It does not validate biological results. Both tests run in CI;
+the trimming test uses Docker there.

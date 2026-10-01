@@ -18,6 +18,7 @@
 8. [Results](#en-outputs)
 9. [Tests and releases](#en-tests)
 10. [Code structure](#en-structure)
+11. [Additional trimming and QC-only runs](#en-trimming)
 
 <a id="en-start"></a>
 
@@ -266,7 +267,7 @@ skip_cutadapt: true
 skip_qc: true
 ```
 
-`skip_cutadapt` bypasses all Cutadapt primer/adapter removal, quality trimming, and minimum-length filtering; original paired reads go directly to QIIME import. When Cutadapt is enabled, `--discard-untrimmed` remains fixed. `skip_qc` disables both raw and post-Cutadapt FastQC/MultiQC. If only Cutadapt is skipped, raw QC runs once and post-Cutadapt QC is omitted. Sample IDs still come from the `reads` pairing pattern; no trimmed filename suffix is required. Skipped stages do not produce new outputs; use a fresh output directory to avoid confusing old reports with the current run.
+`skip_cutadapt` bypasses all Cutadapt primer/adapter removal, quality trimming, and minimum-length filtering; original paired reads go directly to QIIME import. `discard_untrimmed` controls untrimmed-pair filtering (default `true`); see section 11 for additional trimming and QC-only runs. `skip_qc` disables all FastQC/MultiQC tasks, including the trimming summary report. If only Cutadapt is skipped, raw QC runs once and post-Cutadapt QC is omitted. Sample IDs still come from the `reads` pairing pattern; no trimmed filename suffix is required. Skipped stages do not produce new outputs; use a fresh output directory to avoid confusing old reports with the current run.
 
 Use parameters first. Edit tool modules when you need to change commands or logic.
 
@@ -274,7 +275,7 @@ Use parameters first. Edit tool modules when you need to change commands or logi
 |---|---|---|
 | FastQC / MultiQC | Image overrides and CPU settings | [fastqc.nf](modules/fastqc.nf), [multiqc.nf](modules/multiqc.nf) |
 | Region, primers, adapters | `region`, `primer_f`, `primer_r`, `adapter_f`, `adapter_r` | [PrimerConfig.groovy](lib/PrimerConfig.groovy) |
-| Cutadapt filtering | `quality: 20`, `min_length: 50` | [cutadapt.nf](modules/cutadapt.nf); includes `-n 2`, `--discard-untrimmed` |
+| Cutadapt filtering | `quality: 20`, `min_length: 50` | [cutadapt.nf](modules/cutadapt.nf); primer pass uses `-n 2`; `discard_untrimmed: true` by default |
 | QIIME import | `reads` filename pattern | [qiime_import.nf](modules/qiime_import.nf) |
 | Fixed DADA2 | `dada2_trunc_len_f: 0`, `dada2_trunc_len_r: 0`, `dada2_max_ee_f: 2`, `dada2_max_ee_r: 4` | [qiime_dada2.nf](modules/qiime_dada2.nf) |
 | Candidate validation | `trimm_optimal`, `trimm_combinations` | [subworkflows/trimm_optimal.nf](subworkflows/trimm_optimal.nf), [params/trimming](params/trimming) |
@@ -297,7 +298,7 @@ All results are written under `outdir`.
 | Directory | Contents |
 |---|---|
 | `01_raw_qc/`, `03_clean_qc/` | FastQC/MultiQC before and after filtering |
-| `02_cutadapt_q20/` | Trimmed FASTQ, Cutadapt logs and JSON; the directory name is fixed even if `quality` changes |
+| `02_cutadapt_q20/` | Trimmed FASTQ, pass logs/JSON, summary TSV and trimming MultiQC; the directory name is fixed even if `quality` changes |
 | `04_qiime2_import/` | Manifest, paired-end QZA, quality summary |
 | `05_dada2/` | Standard DADA2 results and summaries when optimization is disabled |
 | `05_trimm_optimal_dada2/` | DADA2 outputs for each candidate |
@@ -360,16 +361,115 @@ Omit local image overrides to check public image retrieval. Set a new writable i
 | [nextflow.config](nextflow.config) | Default parameters, containers, and runtime profiles |
 | [nextflow_schema.json](nextflow_schema.json) | Parameter schema |
 | [conf/base.config](conf/base.config) | Default task resources |
+| [conf/modules.config](conf/modules.config) | Containers, publication paths and candidate-failure policy |
 | [lib/PrimerConfig.groovy](lib/PrimerConfig.groovy) | Region primers and adapter resolution |
 | [params/regions/](params/regions/) | Region preset YAML files |
-| [params/examples/](params/examples/) | Custom primer YAML example |
+| [params/examples/](params/examples/) | Custom primer and QC-only YAML examples |
+| [lib/TrimmingConfig.groovy](lib/TrimmingConfig.groovy) | Trimming option validation |
+| [bin/](bin/) | Cutadapt pass execution and summary generation |
 | [params/trimming/](params/trimming/) | Default F/R candidate TSV files and design notes |
 | [modules/](modules/) | Tool process commands |
 | [subworkflows/qc.nf](subworkflows/qc.nf) | Shared raw/clean FastQC → MultiQC workflow |
 | [subworkflows/trimm_optimal.nf](subworkflows/trimm_optimal.nf) | Candidate input, execution, ranking, and selection |
 | [tests/](tests/) | Synthetic FASTQ, primer/container tests, output verifiers |
 
+Module options are passed explicitly from `main.nf`; production modules and subworkflows do not read global `params`. Containers and publication paths are configured in `conf/modules.config`. See [module interfaces](modules/README.md) for reuse in other workflows. Existing user YAML options are unchanged.
+
 Individual tools are called from `main.nf`. QC and truncation optimization remain subworkflows because they connect multiple steps.
+
+<a id="en-trimming"></a>
+
+### 11. Additional trimming and QC-only runs
+
+To use the existing primer/read-through and quality filters without extra adapter or poly-tail removal:
+
+```yaml
+skip_cutadapt: false
+discard_untrimmed: true
+trim_poly_a: false
+trim_poly_g: false
+extra_adapters_f: []
+extra_adapters_r: []
+```
+
+Set `discard_untrimmed: false` to retain pairs without primer/read-through matches. Primer removal, quality trimming and minimum-length filtering still run with either value. This block can be added to the existing analysis YAML; it does not change the end point of the run.
+
+These options are available in the current checkout/development branch, not in the existing `v0.1.0` tag. Use [qc_only.yml](params/examples/qc_only.yml) as a starting point. QC-only runs require paired reads, but no metadata or classifier.
+
+```yaml
+reads: "/path/to/reads/*_{1,2}.fastq.gz"
+outdir: "/path/to/qc_results"
+region: V3V4
+qc_only: true
+# Adapters must be written in the orientation present in each read (5′→3′).
+extra_adapters_f:
+  - CTGTCTCTTATACACATCT
+  - AGATGTGTATAAGAGACAG
+extra_adapters_r:
+  - CTGTCTCTTATACACATCT
+  - AGATGTGTATAAGAGACAG
+trim_poly_a: true
+trim_poly_g: true
+poly_min_length: 10
+discard_untrimmed: false
+```
+
+The two example sequences are a Nextera transposase adapter and its reverse complement. Include only orientations relevant to your library; extra adapters are not reverse-complemented automatically. Each direction accepts multiple IUPAC DNA sequences. The default lists are empty, both poly options default to `false`, and `discard_untrimmed` defaults to `true`.
+
+`discard_untrimmed: false` keeps pairs without primer/read-through matches; **it does not disable primer removal**. With `true`, the pair is discarded if either mate has no primer/read-through match, as before. A read-through match also counts as trimmed, so this is not a strict “5′ primer required” check. Additional adapters or tails do not rescue a pair discarded at this stage. `skip_cutadapt: true` skips all trimming.
+
+Cutadapt runs in separate passes:
+
+1. Existing Q20 (configurable `quality`) and primer/read-through removal, `-n 2`, minimum length and optional untrimmed-pair filtering.
+2. If enabled, exact 3′ poly-A/G tail removal, including adjacent qualifying A/G runs.
+3. If supplied, extra 3′ adapters, including Nextera. This pass can remove multiple matches.
+4. If both features are enabled, another poly-tail pass removes tails exposed by extra-adapter removal.
+5. A final minimum-length filter removes pairs made too short by the added trimming.
+
+The first length filter preserves the previous default behavior and avoids processing pairs already too short; lengths cannot increase in later passes. With no extra adapters or poly trimming, only the original pass runs. Poly trimming uses non-internal Cutadapt 3′ adapters with zero errors and no indels, rather than `--nextseq-trim`. Only an exact consecutive terminal run of at least `poly_min_length` bases is removed; shorter runs and internal homopolymers remain. Biological terminal homopolymers can also meet this rule. See the [Cutadapt adapter guide](https://cutadapt.readthedocs.io/en/v5.2/guide.html#non-internal-5-and-3-adapters).
+
+| End point | Option | Completed stages |
+|---|---|---|
+| Raw QC | `--stop_after raw_qc` | Raw FastQC and MultiQC |
+| Trimming | `--stop_after cutadapt` | Raw QC, Cutadapt, trimming summary and its MultiQC report |
+| Clean QC | `--stop_after clean_qc` or `--qc_only` | All of the above plus clean FastQC/MultiQC |
+| Full analysis (default) | `--stop_after none` | Continue through QIIME 2 and downstream analysis |
+
+`skip_qc: true` disables all FastQC/MultiQC tasks but still produces trimming JSON/TSV. It cannot be combined with `raw_qc`/`clean_qc`. `skip_cutadapt: true` cannot be combined with `cutadapt`/`clean_qc`; use `raw_qc` to inspect original reads only. `qc_only` cannot be combined with a different explicit end point.
+
+To inspect raw QC and then continue, keep the same launch directory, work directory and trimming parameters:
+
+```bash
+nextflow run . -profile singularity -params-file analysis.yml \
+  --qc_only false --stop_after raw_qc -work-dir /path/to/work
+nextflow run . -profile singularity -params-file analysis.yml \
+  --qc_only false --stop_after clean_qc -work-dir /path/to/work -resume
+```
+
+To continue into QIIME 2, provide `metadata` and `classifier`, set `--qc_only false --stop_after none`, and keep `-resume`. Changing trimming options reruns affected tasks. Reusing a result directory does not delete old outputs from stages omitted in the new run; use the current trace/log to identify stages actually executed.
+
+`02_cutadapt_q20/` contains the final paired FASTQ, individual pass JSON, a combined command/log file, per-sample `*.trimming.summary.json` with parameters and commands, and `trimming_summary.tsv` for all samples. `trimming_summary_mqc.json` adds a table to `02_cutadapt_q20/multiqc/multiqc_report.html` (unless QC is skipped).
+
+| TSV field | Unit and meaning |
+|---|---|
+| `input_pairs`, `retained_pairs` | Initial and final read pairs |
+| `primer_matches`, `readthrough_matches` | Match events across both mates in the primer pass |
+| `nextera_matches`, `other_extra_adapter_matches` | Match events for the two listed Nextera sequences versus other configured adapters |
+| `poly_a_matches`, `poly_g_matches` | Exact tail-removal events across both mates and poly passes |
+| `untrimmed_r1_reads`, `untrimmed_r2_reads` | Reads with no primer/read-through match before filtering, even when retained |
+| `discarded_untrimmed_pairs`, `too_short_pairs` | Pairs removed by each filter, summed across passes |
+
+Poly-A removal targets terminal runs, not internal homopolymers. A trailing non-A base prevents an exact A-tail match. Quality or read-through trimming can remove an A-rich end before the poly pass, leaving `poly_a_matches` at zero.
+
+Match counts are not unique read/pair counts. If one adapter removes a downstream adapter or tail with it, the downstream sequence is not counted as another detected match. Pair counts satisfy `input_pairs = retained_pairs + discarded_untrimmed_pairs + too_short_pairs`.
+
+Run the synthetic regression locally (CI uses Docker):
+
+```bash
+python3 tests/test_trimming.py --profile singularity --outdir results/trimming-test
+```
+
+Use a new test output directory. The test checks exact sequences and qualities for two samples, Nextera orientations, other adapters, read-through, adjacent/long/internal/short poly tails, untrimmed pairs, minimum length, MultiQC, early stops, invalid parameters and cached tasks across `-resume`. It does not use research data or run DADA2.
 
 ---
 
@@ -389,6 +489,7 @@ Individual tools are called from `main.nf`. QC and truncation optimization remai
 8. [결과 확인](#ko-outputs)
 9. [테스트와 릴리스](#ko-tests)
 10. [코드 구조](#ko-structure)
+11. [추가 trimming과 QC 전용 실행](#ko-trimming)
 
 <a id="ko-start"></a>
 
@@ -637,7 +738,7 @@ skip_cutadapt: true
 skip_qc: true
 ```
 
-`skip_cutadapt`는 Cutadapt의 프라이머·adapter 제거, 품질 절단, 최소 길이 필터를 모두 생략하고 원본 read 쌍을 QIIME으로 가져옵니다. Cutadapt를 실행할 때는 `--discard-untrimmed`가 그대로 고정 적용됩니다. `skip_qc`는 처리 전·후 FastQC/MultiQC를 모두 생략합니다. Cutadapt만 생략하면 원본 QC만 한 번 수행하고 처리 후 QC는 생략합니다. 샘플 ID는 기존 `reads` 패턴으로 추출하며 trimmed 파일명 접미사는 필요하지 않습니다. 생략한 단계의 새 결과는 생성하지 않으므로 이전 보고서와 혼동하지 않도록 새 결과 폴더를 사용하세요.
+`skip_cutadapt`는 Cutadapt의 프라이머·adapter 제거, 품질 절단, 최소 길이 필터를 모두 생략하고 원본 read 쌍을 QIIME으로 가져옵니다. `discard_untrimmed`로 untrimmed-pair 제거를 선택합니다(기본값 `true`). 추가 trimming과 QC 전용 실행은 11절을 참고하세요. `skip_qc`는 trimming 집계 보고서를 포함한 모든 FastQC/MultiQC를 생략합니다. Cutadapt만 생략하면 원본 QC만 한 번 수행하고 처리 후 QC는 생략합니다. 샘플 ID는 기존 `reads` 패턴으로 추출하며 trimmed 파일명 접미사는 필요하지 않습니다. 생략한 단계의 새 결과는 생성하지 않으므로 이전 보고서와 혼동하지 않도록 새 결과 폴더를 사용하세요.
 
 먼저 파라미터로 조정하고, 명령이나 로직을 바꿔야 할 때 도구 모듈을 수정합니다.
 
@@ -645,7 +746,7 @@ skip_qc: true
 |---|---|---|
 | FastQC / MultiQC | 개별 이미지 경로와 CPU 설정 | [fastqc.nf](modules/fastqc.nf), [multiqc.nf](modules/multiqc.nf) |
 | 영역·프라이머·adapter | `region`, `primer_f`, `primer_r`, `adapter_f`, `adapter_r` | [PrimerConfig.groovy](lib/PrimerConfig.groovy) |
-| Cutadapt 필터 | `quality: 20`, `min_length: 50` | [cutadapt.nf](modules/cutadapt.nf); `-n 2`, `--discard-untrimmed` 등 |
+| Cutadapt 필터 | `quality: 20`, `min_length: 50` | [cutadapt.nf](modules/cutadapt.nf); primer pass는 `-n 2`; 기본값 `discard_untrimmed: true` |
 | QIIME 가져오기 | `reads` 파일명 패턴 | [qiime_import.nf](modules/qiime_import.nf) |
 | 고정 길이 DADA2 | `dada2_trunc_len_f: 0`, `dada2_trunc_len_r: 0`, `dada2_max_ee_f: 2`, `dada2_max_ee_r: 4` | [qiime_dada2.nf](modules/qiime_dada2.nf) |
 | 후보 조건 검사 | `trimm_optimal`, `trimm_combinations` | [subworkflows/trimm_optimal.nf](subworkflows/trimm_optimal.nf), [params/trimming](params/trimming) |
@@ -668,7 +769,7 @@ DADA2의 `trunc-q`나 chimera 처리처럼 명령에 고정된 옵션은 일반 
 | 폴더 | 내용 |
 |---|---|
 | `01_raw_qc/`, `03_clean_qc/` | 필터링 전·후 FastQC/MultiQC |
-| `02_cutadapt_q20/` | 처리된 FASTQ, Cutadapt 로그·JSON. `quality`를 바꿔도 폴더명은 고정 |
+| `02_cutadapt_q20/` | 처리된 FASTQ, pass별 로그·JSON, 집계 TSV 및 trimming MultiQC. `quality`를 바꿔도 폴더명은 고정 |
 | `04_qiime2_import/` | Manifest, paired-end QZA, 품질 요약 |
 | `05_dada2/` | 최적화를 끈 일반 DADA2 결과와 요약 |
 | `05_trimm_optimal_dada2/` | 후보별 DADA2 결과 |
@@ -733,7 +834,9 @@ python3 tests/check_containers.py results/primer-test
 | [conf/base.config](conf/base.config) | 작업 자원 기본값 |
 | [lib/PrimerConfig.groovy](lib/PrimerConfig.groovy) | 영역별 프라이머와 adapter 해석 |
 | [params/regions/](params/regions/) | 영역 선택용 YAML |
-| [params/examples/](params/examples/) | 사용자 프라이머 YAML 예시 |
+| [params/examples/](params/examples/) | 사용자 프라이머 및 QC 전용 YAML 예시 |
+| [lib/TrimmingConfig.groovy](lib/TrimmingConfig.groovy) | Trimming 옵션 검증 |
+| [bin/](bin/) | Cutadapt pass 실행과 통계 집계 |
 | [params/trimming/](params/trimming/) | 기본 F/R 후보 TSV와 설계 설명 |
 | [modules/](modules/) | 도구별 실행 명령 |
 | [subworkflows/qc.nf](subworkflows/qc.nf) | 처리 전·후 공통 FastQC → MultiQC 흐름 |
@@ -743,3 +846,99 @@ python3 tests/check_containers.py results/primer-test
 개별 도구는 `main.nf`에서 호출합니다. 여러 단계를 연결하는 QC와 절단 길이 최적화는 subworkflow로 구성합니다.
 
 ---
+
+분석 설정은 `main.nf`에서 모듈 입력으로 명시적으로 전달하며, 분석 모듈과 서브워크플로는 전역 `params`를 직접 읽지 않습니다. 컨테이너·결과 경로·후보 실패 처리 정책은 `conf/modules.config`에서 관리합니다. 다른 workflow에서의 재사용 방법은 [모듈 입력 설명](modules/README.md)을 참고하세요. 기존 사용자 YAML 옵션은 유지합니다.
+
+<a id="ko-trimming"></a>
+
+### 11. 추가 trimming과 QC 전용 실행
+
+추가 adapter와 poly-tail 제거 없이 기존 primer/read-through 제거와 품질 필터만 사용하려면 기존 분석 YAML에 다음을 지정합니다.
+
+```yaml
+skip_cutadapt: false
+discard_untrimmed: true
+trim_poly_a: false
+trim_poly_g: false
+extra_adapters_f: []
+extra_adapters_r: []
+```
+
+Primer/read-through가 검출되지 않은 pair도 남기려면 `discard_untrimmed: false`로 바꿉니다. 어느 값을 쓰든 프라이머 제거, 품질 절단, 최소 길이 필터는 실행됩니다. 이 설정은 실행 종료 지점을 바꾸지 않습니다.
+
+아래 옵션은 현재 체크아웃·개발 브랜치에 추가된 기능이며 기존 `v0.1.0` 태그에는 없습니다. [qc_only.yml](params/examples/qc_only.yml)을 복사해 시작하세요. QC 전용 실행에는 paired reads가 필요하며 metadata와 classifier는 필요하지 않습니다.
+
+```yaml
+reads: "/path/to/reads/*_{1,2}.fastq.gz"
+outdir: "/path/to/qc_results"
+region: V3V4
+qc_only: true
+# 각 read에 실제로 나타나는 방향(5′→3′)의 adapter 서열을 지정합니다.
+extra_adapters_f:
+  - CTGTCTCTTATACACATCT
+  - AGATGTGTATAAGAGACAG
+extra_adapters_r:
+  - CTGTCTCTTATACACATCT
+  - AGATGTGTATAAGAGACAG
+trim_poly_a: true
+trim_poly_g: true
+poly_min_length: 10
+discard_untrimmed: false
+```
+
+예제의 두 서열은 Nextera transposase adapter와 그 역상보 서열입니다. 라이브러리에 필요한 방향만 지정하세요. 추가 adapter의 역상보 서열은 자동 생성하지 않습니다. 방향별로 여러 IUPAC DNA 서열을 입력할 수 있습니다. 기본값은 빈 adapter 목록, `trim_poly_a: false`, `trim_poly_g: false`, `discard_untrimmed: true`입니다.
+
+`discard_untrimmed: false`는 primer/read-through가 검출되지 않은 pair도 보존하지만 **프라이머 제거 자체를 끄지는 않습니다**. `true`이면 기존처럼 어느 한 mate라도 primer/read-through가 검출되지 않은 pair를 제거합니다. Read-through 검출도 trimmed로 취급하므로 “5′ 프라이머 필수” 검사와는 다릅니다. 이 단계에서 제거된 pair는 추가 adapter나 tail이 있어도 복구되지 않습니다. `skip_cutadapt: true`는 모든 trimming을 생략합니다.
+
+Cutadapt를 다음과 같이 나누어 실행합니다.
+
+1. 기존 Q20(`quality`로 변경 가능), primer/read-through 제거, `-n 2`, 최소 길이 필터 및 선택적 untrimmed-pair 제거.
+2. 활성화한 경우 정확히 일치하는 3′ poly-A/G tail 제거. 연속된 A/G 구간도 각각 기준을 만족하면 제거합니다.
+3. 지정한 경우 Nextera를 포함한 추가 3′ adapter 제거. 여러 번의 일치를 처리할 수 있습니다.
+4. Poly-tail과 추가 adapter를 모두 사용하면 adapter 제거 후 드러난 tail을 한 번 더 처리합니다.
+5. 추가 trimming으로 짧아진 pair에 최종 최소 길이 필터를 적용합니다.
+
+첫 길이 필터는 기존 기본 동작을 유지하면서 이미 너무 짧은 pair의 후속 처리를 줄입니다. 이후 단계에서 서열 길이가 늘어나지는 않습니다. 추가 adapter와 poly 제거를 모두 끄면 기존 첫 pass만 실행합니다. Poly 제거에는 `--nextseq-trim` 대신 Cutadapt의 말단 전용 3′ adapter를 사용하며 오류와 indel을 허용하지 않습니다. 말단에서 같은 염기가 `poly_min_length` 이상 정확히 연속될 때만 제거하므로 더 짧은 tail과 내부 homopolymer는 유지합니다. 생물학적 서열의 말단 homopolymer도 이 조건을 만족하면 제거될 수 있습니다. [Cutadapt adapter 설명](https://cutadapt.readthedocs.io/en/v5.2/guide.html#non-internal-5-and-3-adapters)을 참고하세요.
+
+| 종료 지점 | 옵션 | 수행 단계 |
+|---|---|---|
+| 원본 QC | `--stop_after raw_qc` | 원본 FastQC·MultiQC |
+| Trimming | `--stop_after cutadapt` | 원본 QC, Cutadapt, trimming 집계 및 해당 MultiQC 보고서 |
+| 처리 후 QC | `--stop_after clean_qc` 또는 `--qc_only` | 위 단계와 처리 후 FastQC·MultiQC |
+| 전체 분석(기본값) | `--stop_after none` | QIIME 2와 후속 분석까지 계속 실행 |
+
+`skip_qc: true`는 모든 FastQC·MultiQC를 생략하지만 trimming JSON·TSV는 생성합니다. `raw_qc`·`clean_qc`와는 함께 사용할 수 없습니다. `skip_cutadapt: true`는 `cutadapt`·`clean_qc`와 함께 사용할 수 없으며 원본만 확인하려면 `raw_qc`를 사용하세요. `qc_only`와 다른 명시적 종료 지점도 함께 지정할 수 없습니다.
+
+원본 QC를 확인한 뒤 계속하려면 실행 위치, work directory, trimming 파라미터를 유지합니다.
+
+```bash
+nextflow run . -profile singularity -params-file analysis.yml \
+  --qc_only false --stop_after raw_qc -work-dir /path/to/work
+nextflow run . -profile singularity -params-file analysis.yml \
+  --qc_only false --stop_after clean_qc -work-dir /path/to/work -resume
+```
+
+QIIME 2까지 계속하려면 `metadata`와 `classifier`를 제공하고 `--qc_only false --stop_after none`으로 변경한 뒤 `-resume`을 유지하세요. Trimming 옵션을 바꾸면 관련 task가 다시 실행됩니다. 같은 결과 폴더를 재사용해도 이번에 생략한 단계의 이전 결과가 삭제되지는 않습니다. 실제 수행 단계는 현재 trace·로그로 확인하세요.
+
+`02_cutadapt_q20/`에는 최종 paired FASTQ, pass별 JSON, 통합 명령·로그, 파라미터와 실행 명령이 담긴 샘플별 `*.trimming.summary.json`, 전체 샘플의 `trimming_summary.tsv`가 생성됩니다. `trimming_summary_mqc.json`은 `02_cutadapt_q20/multiqc/multiqc_report.html`에 통계 표를 표시합니다(QC 생략 시 HTML 제외).
+
+| TSV 항목 | 단위 및 의미 |
+|---|---|
+| `input_pairs`, `retained_pairs` | 최초 입력 및 최종 보존 read pair 수 |
+| `primer_matches`, `readthrough_matches` | 첫 pass에서 양쪽 mate의 해당 서열 검출·제거 횟수 |
+| `nextera_matches`, `other_extra_adapter_matches` | 예제의 두 Nextera 서열과 그 외 추가 adapter의 검출·제거 횟수 |
+| `poly_a_matches`, `poly_g_matches` | 양쪽 mate와 모든 poly pass의 정확한 tail 제거 횟수 |
+| `untrimmed_r1_reads`, `untrimmed_r2_reads` | 필터 전 primer/read-through가 검출되지 않은 read 수. 보존한 read도 포함 |
+| `discarded_untrimmed_pairs`, `too_short_pairs` | 각 필터에서 제거된 pair 수를 pass 전체에 걸쳐 합산 |
+
+Poly-A 제거는 말단의 연속 A에 적용하며 내부 homopolymer는 유지합니다. 끝에 A가 아닌 염기가 붙으면 정확한 A-tail 조건에 맞지 않습니다. 앞선 품질·read-through 처리에서 A 구간이 잘리면 `poly_a_matches`는 0일 수 있습니다.
+
+검출 횟수는 고유 read·pair 수와 다릅니다. 한 adapter를 자르면서 그 뒤의 다른 adapter나 tail까지 함께 제거되면, 뒤쪽 서열을 별도의 검출로 중복 집계하지 않습니다. Pair 수는 `input_pairs = retained_pairs + discarded_untrimmed_pairs + too_short_pairs`를 만족합니다.
+
+합성 데이터 회귀 테스트는 다음과 같이 실행합니다(CI에서는 Docker 사용).
+
+```bash
+python3 tests/test_trimming.py --profile singularity --outdir results/trimming-test
+```
+
+새 테스트 결과 폴더를 지정하세요. 두 샘플의 정확한 서열·품질값, Nextera 방향, 기타 adapter, read-through, 인접·긴·내부·짧은 poly 구간, untrimmed pair, 최소 길이 필터, MultiQC, 조기 종료, 잘못된 파라미터, `-resume`의 task 캐시 재사용을 확인합니다. 연구 데이터나 DADA2 실행은 포함하지 않습니다.

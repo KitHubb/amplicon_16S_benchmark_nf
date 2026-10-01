@@ -1,0 +1,19 @@
+# Replace the paths and select the appropriate existing region/primers.
+reads: "/path/to/reads/*_{1,2}.fastq.gz"
+outdir: "/path/to/qc_results"
+region: V3V4
+qc_only: true
+# Set false to retain pairs without primer/read-through matches.
+# This does not disable primer matching/removal.
+discard_untrimmed: false
+extra_adapters_f:
+  - CTGTCTCTTATACACATCT
+  - AGATGTGTATAAGAGACAG
+extra_adapters_r:
+  - CTGTCTCTTATACACATCT
+  - AGATGTGTATAAGAGACAG
+trim_poly_a: true
+trim_poly_g: true
+poly_min_length: 10
+quality: 20
+min_length: 50

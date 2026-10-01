@@ -1,11 +1,10 @@
 process QIIME_DIVERSITY {
-    tag params.run_label
+    tag run_label
     label 'process_high'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-
-    publishDir "${params.outdir}/08_diversity", mode: 'copy', overwrite: true
 
     input:
+    val options
+    val run_label
     path table
     path rooted_tree
     path metadata
@@ -27,7 +26,7 @@ process QIIME_DIVERSITY {
     qiime diversity core-metrics-phylogenetic \
       --i-phylogeny ${rooted_tree} \
       --i-table ${table} \
-      --p-sampling-depth ${params.sampling_depth} \
+      --p-sampling-depth ${options.sampling_depth} \
       --m-metadata-file ${metadata} \
       --p-n-jobs-or-threads ${task.cpus} \
       --output-dir core-metrics-results
@@ -35,7 +34,7 @@ process QIIME_DIVERSITY {
     qiime diversity alpha-rarefaction \
       --i-table ${table} \
       --i-phylogeny ${rooted_tree} \
-      --p-max-depth ${params.alpha_max_depth} \
+      --p-max-depth ${options.alpha_max_depth} \
       --m-metadata-file ${metadata} \
       --o-visualization alpha-rarefaction.qzv
 

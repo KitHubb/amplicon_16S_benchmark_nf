@@ -1,12 +1,9 @@
 process DADA2_TRIMM_SWEEP {
     tag "${opt_id}:F${trunc_f}_R${trunc_r}"
     label 'process_high'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-    errorStrategy 'ignore'
-
-    publishDir "${params.outdir}/05_trimm_optimal_dada2", mode: 'copy', overwrite: true
 
     input:
+    val options
     tuple val(opt_id), val(trunc_f), val(trunc_r), path(demux)
 
     output:
@@ -20,11 +17,11 @@ process DADA2_TRIMM_SWEEP {
     mkdir -p "\$TMPDIR" "\$NUMBA_CACHE_DIR" "\$MPLCONFIGDIR" "\$XDG_CACHE_HOME"
 
     qiime dada2 denoise-paired \
-      --p-pooling-method ${params.dada2_pooling_method} \
+      --p-pooling-method ${options.dada2_pooling_method} \
       --i-demultiplexed-seqs ${demux} \
       --p-trim-left-f 0 --p-trim-left-r 0 \
       --p-trunc-len-f ${trunc_f} --p-trunc-len-r ${trunc_r} \
-      --p-max-ee-f ${params.dada2_max_ee_f} --p-max-ee-r ${params.dada2_max_ee_r} \
+      --p-max-ee-f ${options.dada2_max_ee_f} --p-max-ee-r ${options.dada2_max_ee_r} \
       --p-trunc-q 2 --p-min-overlap 12 --p-chimera-method consensus --p-n-threads ${task.cpus} \
       --o-table ${opt_id}.table.qza \
       --o-representative-sequences ${opt_id}.rep-seqs.qza \
@@ -35,13 +32,9 @@ process DADA2_TRIMM_SWEEP {
 process TAXONOMY_TRIMM_SWEEP {
     tag "${taxonomy_label}:${opt_id}"
     label 'process_high'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-    errorStrategy 'ignore'
-
-    publishDir "${params.outdir}", mode: 'copy', overwrite: true,
-        saveAs: { filename -> "05_trimm_optimal_${taxonomy_label}/${filename}" }
 
     input:
+    val options
     tuple val(opt_id), val(trunc_f), val(trunc_r), path(table), path(repseq), path(stats)
     path classifier
     val taxonomy_label
@@ -57,7 +50,7 @@ process TAXONOMY_TRIMM_SWEEP {
 
     qiime feature-classifier classify-sklearn \
       --i-classifier ${classifier} --i-reads ${repseq} \
-      --p-confidence ${params.taxonomy_confidence} --p-n-jobs ${task.cpus} \
+      --p-confidence ${options.taxonomy_confidence} --p-n-jobs ${task.cpus} \
       --o-classification ${opt_id}.taxonomy.qza
 
     qiime tools export --input-path ${stats} --output-path stats_export
@@ -65,7 +58,7 @@ process TAXONOMY_TRIMM_SWEEP {
     qiime tools export --input-path ${opt_id}.taxonomy.qza --output-path tax_export
     biom convert -i table_export/feature-table.biom -o feature-table.tsv --to-tsv
 
-    python - "${taxonomy_label}" "${opt_id}" "${trunc_f}" "${trunc_r}" "${params.optimal_min_sample_reads}" <<'PY'
+    python - "${taxonomy_label}" "${opt_id}" "${trunc_f}" "${trunc_r}" "${options.optimal_min_sample_reads}" <<'PY'
 import csv, re, sys
 from pathlib import Path
 
@@ -132,10 +125,6 @@ PY
 process SELECT_TRIMM_OPTIMAL {
     tag "${taxonomy_label}:rank_all_candidates"
     label 'process_low'
-    container { params.qiime_sif ?: (workflow.containerEngine == 'docker' ? 'quay.io/qiime2/amplicon:2025.7' : 'docker://quay.io/qiime2/amplicon:2025.7') }
-
-    publishDir "${params.outdir}", mode: 'copy', overwrite: true,
-        saveAs: { filename -> "05_trimm_optimal_${taxonomy_label}/selected/${filename}" }
 
     input:
     val taxonomy_label
