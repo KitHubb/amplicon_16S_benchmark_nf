@@ -27,7 +27,7 @@ with (base/'run.log').open('w') as log:
 assert result.returncode==0,(base/'run.log').read_text(encoding='utf-8')
 with (base/'trace.tsv').open() as handle:
     rows=list(csv.DictReader(handle,delimiter='\t'))
-assert len(rows)==10 and all(row['status']=='COMPLETED' for row in rows),rows
+assert len(rows)==8 and all(row['status']=='COMPLETED' for row in rows),rows
 commands=[]
 for path in (base/'work').glob('*/*/mock_commands.jsonl'):
     commands.extend(json.loads(line) for line in path.read_text().splitlines())
@@ -39,9 +39,6 @@ assert all(option(a,'--p-max-ee-f')=='3' and option(a,'--p-max-ee-r')=='5' for a
 assert sorted(option(a,'--p-trunc-len-f') for a in dada)==['240','250','250','250']
 tax=[a for a in commands if a[:2]==['feature-classifier','classify-sklearn']]
 assert len(tax)==3 and all(option(a,'--p-confidence')=='0.83' for a in tax)
-core=next(a for a in commands if a[:2]==['diversity','core-metrics-phylogenetic'])
-rare=next(a for a in commands if a[:2]==['diversity','alpha-rarefaction'])
-assert option(core,'--p-sampling-depth')=='37' and option(rare,'--p-max-depth')=='83'
 selection=list((base/'work').glob('*/*/optimal_selection.tsv'))
 assert len(selection)==1
 with selection[0].open() as handle:
@@ -50,7 +47,7 @@ assert winner['samples_below_min_reads']=='1'
 for directory in ['modules','subworkflows']:
     for path in (ROOT/directory).glob('*.nf'):
         assert 'params.' not in path.read_text(),path
-print('PASS: standalone module inputs, pooling/truncation/EE/confidence/depth, sweep selection; 10 tasks. QIIME commands mocked, no biological validation.')
+print('PASS: standalone module inputs, pooling/truncation/EE/confidence, sweep selection; 8 tasks. QIIME commands mocked, no biological validation.')
 
 # Exercise the actual pipeline publish rules with mocked tool commands.
 config.write_text(config.read_text() + "\nparams.outdir = '" + str(base/'published') + "'\nincludeConfig '" + str(ROOT/'conf/modules.config') + "'\n")
@@ -59,8 +56,8 @@ command[command.index('-with-trace')+1]=str(base/'publish-trace.tsv')
 with (base/'publish.log').open('w') as log:
     result=subprocess.run(command,cwd=str(base),env=env,stdout=log,stderr=subprocess.STDOUT)
 assert result.returncode==0,(base/'publish.log').read_text(encoding='utf-8')
-for relative in ['05_dada2/table.qza', '06_taxonomy/taxonomy_TEST.qza', '07_phylogeny/rooted-tree.qza',
-                 '08_diversity/alpha-rarefaction.qzv', '05_trimm_optimal_dada2/F250_R200.table.qza',
+for relative in ['05_dada2/table.qza', '06_taxonomy/taxonomy_TEST.qza',
+                 '05_trimm_optimal_dada2/F250_R200.table.qza',
                  '05_trimm_optimal_TEST/F250_R200.metrics.tsv', '05_trimm_optimal_TEST/selected/optimal_selection.tsv']:
     assert (base/'published'/relative).is_file(),relative
 print('PASS: pipeline publishing paths preserved (mock outputs only)')

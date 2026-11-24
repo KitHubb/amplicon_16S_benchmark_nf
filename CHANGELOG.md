@@ -16,7 +16,7 @@
 - Fix QIIME import shell quoting and configure a writable plotting cache.
 - Verify generated reports and artifacts in CI before publishing the release.
 
-Validation: all five smoke-test tasks and output verification passed with Singularity, including cold-cache public image retrieval, cache reuse, and separate server-local QC images. Full DADA2, taxonomy, phylogeny, and diversity analyses are outside smoke-test coverage.
+Validation: all five smoke-test tasks and output verification passed with Singularity, including cold-cache public image retrieval, cache reuse, and separate server-local QC images. Full DADA2 and taxonomy analyses are outside smoke-test coverage.
 
 # v0.0.9
 

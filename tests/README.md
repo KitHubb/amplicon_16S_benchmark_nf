@@ -32,10 +32,10 @@ Cutadapt module on synthetic paired reads. The verifier requires exactly one
 record per mate, each with 60 T bases and 60 quality characters.
 It also runs the real FastQC and MultiQC modules, imports the trimmed reads
 with QIIME 2, creates a demux summary, and checks availability of the DADA2,
-feature-classifier, phylogeny, diversity, and taxa actions. The output verifier
+feature-classifier and taxa actions. The output verifier
 checks FastQC ZIPs, the MultiQC report, QIIME artifacts, and the plugin check log.
 No project data or existing QIIME artifacts are required. Plugin availability
-checks do not run full denoising, classification, phylogeny, or diversity analyses.
+checks do not run full denoising or classification analyses.
 
 To test public image retrieval, omit all `*_sif` overrides. To exercise a fresh
 Singularity image cache, set `NXF_SINGULARITY_CACHEDIR` to a new writable directory.

@@ -13,8 +13,6 @@ Production modules and subworkflows do not read global `params`. The calling wor
 | `QIIME_IMPORT` | run label, `(sample_ids, forward_reads, reverse_reads)` |
 | `QIIME_DADA2` | DADA2 options map, run label, demux artifact |
 | `QIIME_TAXONOMY` | taxonomy options map, run label, representative sequences, table, metadata, classifier, taxonomy label |
-| `QIIME_PHYLOGENY` | run label, representative sequences |
-| `QIIME_DIVERSITY` | diversity options map, run label, table, rooted tree, metadata |
 | `DADA2_TRIMM_SWEEP` | DADA2 options map, `(candidate_id, trunc_f, trunc_r, demux)` |
 | `TAXONOMY_TRIMM_SWEEP` | taxonomy options map, `(candidate_id, trunc_f, trunc_r, table, repseq, stats)`, classifier, taxonomy label |
 | `SELECT_TRIMM_OPTIMAL` | taxonomy label, candidate artifact/metrics files |
@@ -25,7 +23,6 @@ Option map keys:
 - Primers: `primer_f`, `primer_r`, `adapter_f`, `adapter_r`; the pipeline also records `region`.
 - DADA2: `dada2_pooling_method`, `dada2_max_ee_f`, `dada2_max_ee_r`; standard DADA2 additionally requires `dada2_trunc_len_f`, `dada2_trunc_len_r`. Sweep truncation lengths come from its tuple input.
 - Taxonomy: `taxonomy_confidence`; candidate evaluation additionally requires `optimal_min_sample_reads`.
-- Diversity: `sampling_depth`, `alpha_max_depth`.
 
 `QC` takes a reads channel and stage. `TRIMM_OPTIMAL_WORKFLOW` takes demux, classifier, taxonomy label, a candidate TSV **Path**, DADA2 options and taxonomy options. Use value channels for shared demux/classifier/label inputs to the sweep. Output channel names and filenames are unchanged.
 
@@ -44,8 +41,6 @@ Option map keys:
 | `QIIME_IMPORT` | 실행 이름, `(sample_ids, forward_reads, reverse_reads)` |
 | `QIIME_DADA2` | DADA2 설정 map, 실행 이름, demux artifact |
 | `QIIME_TAXONOMY` | 분류 설정 map, 실행 이름, 대표 서열, table, metadata, classifier, 분류 이름 |
-| `QIIME_PHYLOGENY` | 실행 이름, 대표 서열 |
-| `QIIME_DIVERSITY` | 다양성 설정 map, 실행 이름, table, rooted tree, metadata |
 | `DADA2_TRIMM_SWEEP` | DADA2 설정 map, `(candidate_id, trunc_f, trunc_r, demux)` |
 | `TAXONOMY_TRIMM_SWEEP` | 분류 설정 map, `(candidate_id, trunc_f, trunc_r, table, repseq, stats)`, classifier, 분류 이름 |
 | `SELECT_TRIMM_OPTIMAL` | 분류 이름, 후보 artifact·지표 파일들 |
@@ -56,7 +51,6 @@ Option map keys:
 - 프라이머: `primer_f`, `primer_r`, `adapter_f`, `adapter_r`. 현재 파이프라인은 `region`도 기록합니다.
 - DADA2: `dada2_pooling_method`, `dada2_max_ee_f`, `dada2_max_ee_r`. 일반 DADA2는 `dada2_trunc_len_f`, `dada2_trunc_len_r`도 필요합니다. 후보 비교에서는 tuple의 절단 길이를 사용합니다.
 - 분류: `taxonomy_confidence`. 후보 평가에는 `optimal_min_sample_reads`도 필요합니다.
-- 다양성: `sampling_depth`, `alpha_max_depth`.
 
 `QC`는 reads channel과 stage를 받습니다. `TRIMM_OPTIMAL_WORKFLOW`는 demux, classifier, 분류 이름, 후보 TSV의 **Path**, DADA2 설정, 분류 설정을 받습니다. Sweep에 공통으로 전달할 demux·classifier·분류 이름은 value channel을 사용하세요. 출력 channel 이름과 파일명은 기존과 같습니다.
 

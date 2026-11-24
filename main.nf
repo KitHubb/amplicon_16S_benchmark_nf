@@ -11,8 +11,6 @@ include { QIIME_IMPORT } from './modules/qiime_import'
 include { QIIME_DADA2 } from './modules/qiime_dada2'
 include { QIIME_DADA2_BENCHMARK } from './modules/qiime_dada2_benchmark'
 include { QIIME_TAXONOMY } from './modules/qiime_taxonomy'
-include { QIIME_PHYLOGENY } from './modules/qiime_phylogeny'
-include { QIIME_DIVERSITY } from './modules/qiime_diversity'
 include { TRIMM_OPTIMAL_WORKFLOW } from './subworkflows/trimm_optimal'
 
 include { PRIMER_TEST } from './tests/primers'
@@ -28,7 +26,6 @@ workflow {
     def trimming_options = TrimmingConfig.resolve(params)
     def dada2_options = [dada2_pooling_method: params.dada2_pooling_method, dada2_trunc_len_f: params.dada2_trunc_len_f, dada2_trunc_len_r: params.dada2_trunc_len_r, dada2_max_ee_f: params.dada2_max_ee_f, dada2_max_ee_r: params.dada2_max_ee_r]
     def taxonomy_options = [taxonomy_confidence: params.taxonomy_confidence, optimal_min_sample_reads: params.optimal_min_sample_reads]
-    def diversity_options = [sampling_depth: params.sampling_depth, alpha_max_depth: params.alpha_max_depth]
     if (!(params.stop_after in ['none', 'raw_qc', 'cutadapt', 'clean_qc'])) {
         error 'stop_after must be one of: none, raw_qc, cutadapt, clean_qc'
     }
@@ -210,19 +207,6 @@ workflow {
                         taxonomy_label_ch
                     )
 
-                    // 7. MAFFT alignment, masking, FastTree and midpoint-rooted phylogeny.
-                    QIIME_PHYLOGENY(params.run_label, selected_repseq_ch)
-
-                    // 8. Optional phylogenetic alpha/beta diversity, rarefaction, PCoA and Emperor plots.
-                    if (params.diversity_enabled.toString().toBoolean()) {
-                        QIIME_DIVERSITY(
-                            diversity_options,
-                            params.run_label,
-                            selected_table_ch,
-                            QIIME_PHYLOGENY.out.rooted_tree,
-                            metadata_ch
-                        )
-                    }
                 }
             }
         }

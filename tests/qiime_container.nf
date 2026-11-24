@@ -14,9 +14,6 @@ process QIIME_CONTAINER_CHECK {
     qiime info > qiime-container.txt
     qiime dada2 denoise-paired --help > /dev/null
     qiime feature-classifier classify-sklearn --help > /dev/null
-    qiime phylogeny align-to-tree-mafft-fasttree --help > /dev/null
-    qiime diversity core-metrics-phylogenetic --help > /dev/null
-    qiime diversity alpha-rarefaction --help > /dev/null
     qiime taxa barplot --help > /dev/null
     printf '\nPASS: required QIIME actions are available\n' >> qiime-container.txt
     """
