@@ -1,4 +1,24 @@
-# amplicon_16S_qiime_nf
+# amplicon_16S_benchmark_nf
+
+This repository keeps the original `amplicon_16S_qiime_nf` workflow and adds a minimal Stage 1 benchmark mode for the [2026 16S V1-V5 benchmark design](https://github.com/KitHubb/2026_16S_V1V5_test).
+
+When `benchmark_parameters` is supplied, FastQC, Cutadapt and QIIME 2 import run once. The imported reads are then fanned out to one q2-dada2 task per M10/M12 row. Taxonomy, phylogeny and diversity are intentionally skipped in this mode. CAT (`justConcatenate`) rows are also skipped until the standalone R/DADA2 image and module described by the study design are available; they are never substituted with an overlap setting.
+
+```bash
+nextflow run <pipeline-dir>/main.nf \
+  -profile singularity \
+  -params-file <base.yaml> \
+  --benchmark_parameters <benchmark-parameters.tsv> \
+  --outdir <outdir> \
+  -work-dir <work-dir> \
+  -with-report <outdir>/nextflow-report.html \
+  -with-timeline <outdir>/nextflow-timeline.html \
+  -with-trace <outdir>/nextflow-trace.tsv \
+  -with-dag <outdir>/nextflow-dag.html \
+  -resume
+```
+
+Benchmark outputs use one flat option-labelled directory per configuration, for example `OUTDIR/T01_E22_M12_F450_R450_EE2-2_overlap12/`. No additional stage directory is created inside a configuration directory. Each directory contains QIIME 2 artifacts and visualizations plus `denoising-stats.tsv`, `feature-table.biom`, `rep-seqs.fasta`, `benchmark-parameters.tsv`, and tool versions. The TSV must use unique safe `config_id` values and the columns `trunc_len_f`, `trunc_len_r`, `max_ee_f`, `max_ee_r`, `merge_id`, `merge_mode`, and `min_overlap`. Stage 1 fixes `truncQ=2`, pooling=`independent`, chimera=`consensus`, and the q2-dada2 default `maxMismatch=0`.
 
 [English](#english) · [한국어](#korean)
 

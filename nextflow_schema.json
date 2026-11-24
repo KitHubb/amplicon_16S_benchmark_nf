@@ -35,6 +35,7 @@
     "dada2_pooling_method": { "type": "string", "enum": ["independent", "pseudo"], "default": "independent" },
     "dada2_trunc_len_f": { "type": "integer", "default": 0, "minimum": 0 },
     "dada2_trunc_len_r": { "type": "integer", "default": 0, "minimum": 0 },
+    "benchmark_parameters": { "type": ["string", "null"], "description": "Stage 1 TSV containing config_id, truncation, maxEE and merge settings; M10/M12 use q2-dada2 and CAT is reserved for standalone R/DADA2" },
     "trimm_optimal": { "type": "boolean", "default": false },
     "trimm_combinations": { "type": ["string", "null"], "description": "Custom TSV containing name, trunc_len_f and trunc_len_r; omitted selects params/trimming/<region>_10bp.tsv" },
     "taxonomy_confidence": { "type": "number", "default": 0.7, "minimum": 0, "maximum": 1 },
@@ -52,6 +53,10 @@
       ]
     },
     "then": {},
-    "else": { "required": ["classifier", "metadata"] }
+    "else": {
+      "if": { "properties": { "benchmark_parameters": { "type": "string", "minLength": 1 } }, "required": ["benchmark_parameters"] },
+      "then": {},
+      "else": { "required": ["classifier", "metadata"] }
+    }
   }
 }

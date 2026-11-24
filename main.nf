@@ -9,6 +9,7 @@ include { MULTIQC as TRIMMING_MULTIQC } from './modules/multiqc'
 include { CUTADAPT } from './modules/cutadapt'
 include { QIIME_IMPORT } from './modules/qiime_import'
 include { QIIME_DADA2 } from './modules/qiime_dada2'
+include { QIIME_DADA2_BENCHMARK } from './modules/qiime_dada2_benchmark'
 include { QIIME_TAXONOMY } from './modules/qiime_taxonomy'
 include { QIIME_PHYLOGENY } from './modules/qiime_phylogeny'
 include { QIIME_DIVERSITY } from './modules/qiime_diversity'
@@ -17,6 +18,8 @@ include { TRIMM_OPTIMAL_WORKFLOW } from './subworkflows/trimm_optimal'
 include { PRIMER_TEST } from './tests/primers'
 
 workflow {
+    def benchmark_parameters = params.benchmark_parameters?.toString()?.trim()
+    def benchmark_mode = benchmark_parameters != null && !benchmark_parameters.isEmpty()
     ['skip_cutadapt', 'skip_qc', 'qc_only'].each { key ->
         if (!(params[key].toString() in ['true', 'false'])) {
             error "${key} must be true or false"
@@ -33,6 +36,9 @@ workflow {
         error 'qc_only is an alias for stop_after clean_qc; do not combine it with a different stop_after'
     }
     def stopAfter = params.qc_only.toString().toBoolean() ? 'clean_qc' : params.stop_after
+    if (benchmark_mode && stopAfter != 'none') {
+        error 'benchmark_parameters requires stop_after=none'
+    }
     if (params.skip_qc.toString().toBoolean() && stopAfter in ['raw_qc', 'clean_qc']) {
         error 'raw_qc/clean_qc requires skip_qc=false'
     }
@@ -41,6 +47,12 @@ workflow {
     }
     if (!(params.dada2_pooling_method instanceof CharSequence) || !(params.dada2_pooling_method in ['independent', 'pseudo'])) {
         error 'dada2_pooling_method must be one of: independent, pseudo'
+    }
+    if (benchmark_mode && params.trimm_optimal.toString().toBoolean()) {
+        error 'benchmark_parameters and trimm_optimal cannot be enabled together'
+    }
+    if (benchmark_mode && params.dada2_pooling_method != 'independent') {
+        error 'Stage 1 benchmark design fixes dada2_pooling_method to independent'
     }
     log.info "DADA2 pooling method: ${params.dada2_pooling_method}"
     if (params.test) {
@@ -54,11 +66,11 @@ workflow {
         if (!params.reads) {
             error 'Provide --reads, e.g. /data/run/*_{1,2}.fastq.gz'
         }
-        if (stopAfter == 'none' && !params.metadata) {
+        if (stopAfter == 'none' && !benchmark_mode && !params.metadata) {
             error 'Provide --metadata with a QIIME 2-compatible TSV file'
         }
 
-        if (stopAfter == 'none' && !params.classifier) {
+        if (stopAfter == 'none' && !benchmark_mode && !params.classifier) {
             error 'Provide --classifier with a QIIME 2 classifier artifact'
         }
 
@@ -89,57 +101,128 @@ workflow {
                     tuple(rows.collect { it[0].id }, rows.collect { it[1] }, rows.collect { it[2] })
                 })
 
-                metadata_ch = Channel.value(file(params.metadata, checkIfExists: true))
-                classifier_file = file(params.classifier, checkIfExists: true)
-                classifier_ch = Channel.value(classifier_file)
+                if (benchmark_mode) {
+                    log.info "Stage 1 benchmark parameters: ${benchmark_parameters}"
+                    log.warn 'q2-dada2 will run M10 and M12 rows; CAT rows require the planned standalone R/DADA2 module and are skipped'
 
-                taxonomy_label = params.taxonomy_label?.toString()?.trim()
-                if (!taxonomy_label || taxonomy_label.equalsIgnoreCase('AUTO')) {
-                    classifier_path_lower = classifier_file.toString().toLowerCase()
-                    taxonomy_label = classifier_path_lower.contains('/gg2/')   ? 'GG2'   :
-                                     classifier_path_lower.contains('/silva/') ? 'SILVA' :
-                                     classifier_path_lower.contains('/gtdb')   ? 'GTDB'  :
-                                     classifier_file.baseName
-                }
-                taxonomy_label = taxonomy_label.replaceAll(/[^A-Za-z0-9._-]/, '_')
-                taxonomy_label_ch = Channel.value(taxonomy_label)
+                    benchmark_options_ch = Channel
+                        .fromPath(benchmark_parameters, checkIfExists: true)
+                        .splitCsv(header: true, sep: '\t')
+                        .map { row ->
+                            def config_id = row.config_id?.toString()?.trim()
+                            if (!config_id || !(config_id ==~ /[A-Za-z0-9._-]+/)) {
+                                error "Invalid benchmark config_id: ${row.config_id}"
+                            }
+                            def trunc_len_f_value = row.trunc_len_f?.toString()?.trim()
+                            def trunc_len_r_value = row.trunc_len_r?.toString()?.trim()
+                            def max_ee_f_value = row.max_ee_f?.toString()?.trim()
+                            def max_ee_r_value = row.max_ee_r?.toString()?.trim()
+                            if (!(trunc_len_f_value ==~ /\d+/) || !(trunc_len_r_value ==~ /\d+/) ||
+                                !(max_ee_f_value ==~ /\d+/) || !(max_ee_r_value ==~ /\d+/)) {
+                                error "${config_id}: trunc_len_f, trunc_len_r, max_ee_f and max_ee_r must be non-negative integers"
+                            }
+                            def trunc_len_f = trunc_len_f_value.toInteger()
+                            def trunc_len_r = trunc_len_r_value.toInteger()
+                            def max_ee_f = max_ee_f_value.toInteger()
+                            def max_ee_r = max_ee_r_value.toInteger()
+                            if (trunc_len_f < 1 || trunc_len_r < 1) {
+                                error "${config_id}: truncation lengths must be at least 1"
+                            }
 
-                // 5. Standard DADA2, or optional parameter sweep followed by rule-based selection.
-                if (params.trimm_optimal.toString().toBoolean()) {
-                    TRIMM_OPTIMAL_WORKFLOW(QIIME_IMPORT.out.demux, classifier_ch, taxonomy_label_ch,
-                        file(params.trimm_combinations ?: "${projectDir}/params/trimming/${params.region.toString().trim().toLowerCase()}_10bp.tsv", checkIfExists: true),
-                        dada2_options, taxonomy_options)
-                    selected_table_ch = TRIMM_OPTIMAL_WORKFLOW.out.table
-                    selected_repseq_ch = TRIMM_OPTIMAL_WORKFLOW.out.repseq
+                            def merge_id = row.merge_id?.toString()?.trim()
+                            if (!(merge_id in ['M10', 'M12', 'CAT'])) {
+                                error "${config_id}: merge_id must be M10, M12, or CAT"
+                            }
+                            def merge_mode = row.merge_mode?.toString()?.trim()
+                            def expected_merge_mode = merge_id == 'CAT' ? 'just_concatenate' : 'overlap'
+                            if (merge_mode != expected_merge_mode) {
+                                error "${config_id}: ${merge_id} requires merge_mode=${expected_merge_mode}"
+                            }
+                            def min_overlap = null
+                            if (merge_id != 'CAT') {
+                                def min_overlap_value = row.min_overlap?.toString()?.trim()
+                                if (!(min_overlap_value ==~ /\d+/)) {
+                                    error "${config_id}: min_overlap must be a non-negative integer for ${merge_id}"
+                                }
+                                min_overlap = min_overlap_value.toInteger()
+                                def expected_overlap = merge_id == 'M10' ? 10 : 12
+                                if (min_overlap != expected_overlap) {
+                                    error "${config_id}: ${merge_id} requires min_overlap=${expected_overlap}"
+                                }
+                            }
+
+                            def merge_label = merge_id == 'CAT' ? 'concat' : "overlap${min_overlap}"
+                            def result_dir = "${config_id}_F${trunc_len_f}_R${trunc_len_r}_EE${max_ee_f}-${max_ee_r}_${merge_label}"
+                            tuple(
+                                [config_id: config_id, merge_id: merge_id, result_dir: result_dir],
+                                [
+                                    dada2_pooling_method: 'independent',
+                                    dada2_trunc_len_f: trunc_len_f,
+                                    dada2_trunc_len_r: trunc_len_r,
+                                    dada2_max_ee_f: max_ee_f,
+                                    dada2_max_ee_r: max_ee_r,
+                                    merge_id: merge_id,
+                                    merge_mode: merge_mode,
+                                    min_overlap: min_overlap
+                                ]
+                            )
+                        }
+                        .filter { meta, options -> options.merge_id != 'CAT' }
+
+                    QIIME_DADA2_BENCHMARK(benchmark_options_ch, QIIME_IMPORT.out.demux)
                 } else {
-                    QIIME_DADA2(dada2_options, params.run_label, QIIME_IMPORT.out.demux)
-                    selected_table_ch = QIIME_DADA2.out.table
-                    selected_repseq_ch = QIIME_DADA2.out.repseq
-                }
+                    metadata_ch = Channel.value(file(params.metadata, checkIfExists: true))
+                    classifier_file = file(params.classifier, checkIfExists: true)
+                    classifier_ch = Channel.value(classifier_file)
 
-                // 6. Final SILVA taxonomy assignment and taxa bar plot using the selected ASVs.
-                QIIME_TAXONOMY(
-                    taxonomy_options,
-                    params.run_label,
-                    selected_repseq_ch,
-                    selected_table_ch,
-                    metadata_ch,
-                    classifier_ch,
-                    taxonomy_label_ch
-                )
+                    taxonomy_label = params.taxonomy_label?.toString()?.trim()
+                    if (!taxonomy_label || taxonomy_label.equalsIgnoreCase('AUTO')) {
+                        classifier_path_lower = classifier_file.toString().toLowerCase()
+                        taxonomy_label = classifier_path_lower.contains('/gg2/')   ? 'GG2'   :
+                                         classifier_path_lower.contains('/silva/') ? 'SILVA' :
+                                         classifier_path_lower.contains('/gtdb/')   ? 'GTDB'  :
+                                         classifier_file.baseName
+                    }
+                    taxonomy_label = taxonomy_label.replaceAll(/[^A-Za-z0-9._-]/, '_')
+                    taxonomy_label_ch = Channel.value(taxonomy_label)
 
-                // 7. MAFFT alignment, masking, FastTree and midpoint-rooted phylogeny.
-                QIIME_PHYLOGENY(params.run_label, selected_repseq_ch)
+                    // 5. Standard DADA2, or optional parameter sweep followed by rule-based selection.
+                    if (params.trimm_optimal.toString().toBoolean()) {
+                        TRIMM_OPTIMAL_WORKFLOW(QIIME_IMPORT.out.demux, classifier_ch, taxonomy_label_ch,
+                            file(params.trimm_combinations ?: "${projectDir}/params/trimming/${params.region.toString().trim().toLowerCase()}_10bp.tsv", checkIfExists: true),
+                            dada2_options, taxonomy_options)
+                        selected_table_ch = TRIMM_OPTIMAL_WORKFLOW.out.table
+                        selected_repseq_ch = TRIMM_OPTIMAL_WORKFLOW.out.repseq
+                    } else {
+                        QIIME_DADA2(dada2_options, params.run_label, QIIME_IMPORT.out.demux)
+                        selected_table_ch = QIIME_DADA2.out.table
+                        selected_repseq_ch = QIIME_DADA2.out.repseq
+                    }
 
-                // 8. Optional phylogenetic alpha/beta diversity, rarefaction, PCoA and Emperor plots.
-                if (params.diversity_enabled.toString().toBoolean()) {
-                    QIIME_DIVERSITY(
-                        diversity_options,
+                    // 6. Final SILVA taxonomy assignment and taxa bar plot using the selected ASVs.
+                    QIIME_TAXONOMY(
+                        taxonomy_options,
                         params.run_label,
+                        selected_repseq_ch,
                         selected_table_ch,
-                        QIIME_PHYLOGENY.out.rooted_tree,
-                        metadata_ch
+                        metadata_ch,
+                        classifier_ch,
+                        taxonomy_label_ch
                     )
+
+                    // 7. MAFFT alignment, masking, FastTree and midpoint-rooted phylogeny.
+                    QIIME_PHYLOGENY(params.run_label, selected_repseq_ch)
+
+                    // 8. Optional phylogenetic alpha/beta diversity, rarefaction, PCoA and Emperor plots.
+                    if (params.diversity_enabled.toString().toBoolean()) {
+                        QIIME_DIVERSITY(
+                            diversity_options,
+                            params.run_label,
+                            selected_table_ch,
+                            QIIME_PHYLOGENY.out.rooted_tree,
+                            metadata_ch
+                        )
+                    }
                 }
             }
         }
